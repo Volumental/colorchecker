@@ -1,0 +1,21 @@
+find_library(FLANN_LIBS  NAMES "flann.lib" "flann"  PATHS
+			${FLANN_ROOT}/lib
+			${THIRDPARTY_INSTALL_PREFIX}/lib
+			${THIRDPARTY_INSTALL_PREFIX}/flann/lib)
+
+find_path(FLANN_INCLUDE_DIR flann/flann.h PATHS
+	${FLANN_ROOT}/include/
+	${THIRDPARTY_INCLUDE_DIR}
+	${THIRDPARTY_INSTALL_PREFIX}/flann/include/)
+
+# Helping PCL find FLANN also.
+set(FLANN_INCLUDE_DIRS ${FLANN_INCLUDE_DIR})
+set(FLANN_LIBRARY ${FLANN_LIBS})
+
+set(FLANN_LIB_DIR  ${FLANN_INCLUDE_DIR}/../lib)
+
+mark_as_advanced(
+    FLANN_INCLUDE_DIR
+    FLANN_LIBRARY_DEBUG
+    FLANN_LIBS
+)

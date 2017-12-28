@@ -1,0 +1,1 @@
+find_package(X11 REQUIRED) # X11_LIBRARIES and X11_INCLUDE_DIR
