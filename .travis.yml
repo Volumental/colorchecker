@@ -23,7 +23,6 @@ matrix:
 
 before_install:
   - eval "${MATRIX_EVAL}"
-  - pip install --user opencv-python
 
 before_script:
   - scripts/build.sh
