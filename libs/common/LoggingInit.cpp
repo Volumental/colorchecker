@@ -16,7 +16,6 @@
 
 #include "algorithm/Range.hpp"
 #include "algorithm/Vector.hpp"
-#include "BuildInfo.hpp"
 #include "Logging.hpp"
 #include "Profiler.hpp"
 #include "ScopeExit.hpp"
@@ -148,10 +147,7 @@ std::string generateProgramStats(char** argv) // NOLINT
 
     boost::algorithm::trim(runtime_info);
 
-    std::string build_info = kBuildInfo;
-    boost::algorithm::trim(build_info);
-
-    return "Build info:\n" + indent(build_info) + "\nRuntime info:\n" + indent(runtime_info);
+    return "Runtime info:\n" + indent(runtime_info);
 }
 
 void initLogging(int& argc, char**& argv, Arguments arguments) // NOLINT
