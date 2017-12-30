@@ -15,7 +15,7 @@ matrix:
     - os: osx
       osx_image: xcode9.1
       env:
-        - MATRIX_EVAL="brew install gcc5 && CC=gcc-5 && CXX=g++-5"
+        - MATRIX_EVAL="brew install gcc5 boost cmake eigen gflags opencv3 && CC=gcc-5 && CXX=g++-5"
 
 before_install:
   - eval "${MATRIX_EVAL}"
