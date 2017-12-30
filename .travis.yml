@@ -12,16 +12,18 @@ matrix:
             - cmake
             - libboost-all-dev
             - libgflags-dev
+            - python-pip
       env:
          - MATRIX_EVAL="CC=gcc-5 && CXX=g++-5"
 
     - os: osx
       osx_image: xcode8.3
       env:
-        - MATRIX_EVAL="brew install gcc5 boost cmake eigen gflags opencv3 && CC=gcc-5 && CXX=g++-5"
+        - MATRIX_EVAL="brew install gcc5 boost cmake eigen gflags python && CC=gcc-5 && CXX=g++-5"
 
 before_install:
   - eval "${MATRIX_EVAL}"
+  - pip install opencv-python
 
 before_script:
   - scripts/build.sh
