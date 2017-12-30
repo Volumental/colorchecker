@@ -12,7 +12,7 @@ matrix:
             - cmake
             - libboost-all-dev
             - libgflags-dev
-            - python-pip
+            - libopencv-dev
       env:
          - MATRIX_EVAL="CC=gcc-5 && CXX=g++-5"
 
