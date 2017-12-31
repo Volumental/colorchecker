@@ -14,7 +14,7 @@ matrix:
             - libboost-all-dev
             - libgflags-dev
             - libjemalloc-dev
-            - libopencv-dev
+            - libopencv-dev=3.2.0-2~trusty3
       env:
          - MATRIX_EVAL="CC=gcc-5 && CXX=g++-5"
 
