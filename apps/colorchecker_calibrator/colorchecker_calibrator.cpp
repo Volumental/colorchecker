@@ -27,8 +27,8 @@ Debugging tool for color correction with colorchecker calibration target.
 )");
     komb::initLogging(argc, argv);
 
-    cv::Mat3b reference_image = readCvImageOrDie(FLAGS_ref_image);
-    cv::Mat3b camera_image = readCvImageOrDie(FLAGS_cam_image);
+    cv::Mat3b reference_image = readCvImageOrDie(FLAGS_ref_image, cv::IMREAD_COLOR);
+    cv::Mat3b camera_image    = readCvImageOrDie(FLAGS_cam_image, cv::IMREAD_COLOR);
     double scale = 500.0 / camera_image.cols;
     cv::resize(camera_image, camera_image, cv::Size(0, 0), scale, scale, cv::INTER_AREA);
     cv::blur(camera_image, camera_image, cv::Size(11, 11));
