@@ -9,14 +9,14 @@ matrix:
             - ubuntu-toolchain-r-test
             - sourceline: 'ppa:lkoppel/opencv'
           packages:
-            - g++-5
+            - g++-7
             - cmake
             - libboost-all-dev
             - libgflags-dev
             - libjemalloc-dev
             - libopencv-dev
       env:
-         - MATRIX_EVAL="CC=gcc-5 && CXX=g++-5"
+        - MATRIX_EVAL="CC=gcc-7 && CXX=g++-7"
 
     - os: osx
       osx_image: xcode8.3
