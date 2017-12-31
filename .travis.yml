@@ -7,14 +7,14 @@ matrix:
         apt:
           sources:
             - ubuntu-toolchain-r-test
-            - sourceline: 'ppa:ntamas/opencv3'
+            - sourceline: 'ppa:lkoppel/opencv'
           packages:
             - g++-5
             - cmake
             - libboost-all-dev
             - libgflags-dev
             - libjemalloc-dev
-            - libopencv-dev=3.2.0-2~trusty3
+            - libopencv-dev
       env:
          - MATRIX_EVAL="CC=gcc-5 && CXX=g++-5"
 
