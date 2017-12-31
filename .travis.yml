@@ -12,6 +12,7 @@ matrix:
             - g++-7
             - cmake
             - libboost-all-dev
+            - libeigen3-dev
             - libgflags-dev
             - libjemalloc-dev
             - libopencv-dev
