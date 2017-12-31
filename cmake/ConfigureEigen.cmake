@@ -5,6 +5,7 @@ find_path(EIGEN_INCLUDE_DIR REQUIRED Eigen/Core PATHS
     ${THIRDPARTY_INCLUDE_DIR}/eigen3
     ${THIRDPARTY_INSTALL_PREFIX}
     /opt/local/include/eigen3
+    /usr/include/eigen3
 )
 
 if (EIGEN_INCLUDE_DIR)
