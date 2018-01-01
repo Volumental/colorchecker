@@ -12,7 +12,6 @@
 #include <common/Logging.hpp>
 #include <common/Math.hpp>
 #include <common/String.hpp>
-#include <image_toolbox/Gamma.hpp>
 #include <image_toolbox/Magnitude.hpp>
 
 namespace komb {
@@ -250,16 +249,8 @@ cv::Matx34f findColorTransformation(
         cv::Vec3b cam_color = camera_checker(i);
         cv::Vec3b ref_color = reference_checker(i);
         cv::Mat1f A_row(1, 4);
-        A_row <<
-            linearFromSrgbByte(cam_color[0]),
-            linearFromSrgbByte(cam_color[1]),
-            linearFromSrgbByte(cam_color[2]),
-            1;
-        cv::Mat1f b(cv::Vec3f(
-            linearFromSrgbByte(ref_color[0]),
-            linearFromSrgbByte(ref_color[1]),
-            linearFromSrgbByte(ref_color[2])),
-            true);
+        A_row << cam_color[0], cam_color[1], cam_color[2], 1;
+        cv::Mat1f b(cv::Vec3f(ref_color), true);
         AtA += A_row.t() * A_row;
         AtB += A_row.t() * b.t();
     }
@@ -276,16 +267,12 @@ void applyColorTransformation(
 {
     auto transform = [&color_transformation](cv::Vec3b cam_color)
     {
-        cv::Vec4f A_row(
-            linearFromSrgbByte(cam_color[0]),
-            linearFromSrgbByte(cam_color[1]),
-            linearFromSrgbByte(cam_color[2]),
-            1);
+        cv::Vec4f A_row(cam_color[0], cam_color[1], cam_color[2], 1);
         cv::Vec3f new_color = color_transformation * A_row;
         return cv::Vec3b(
-            srgbByteFromLinear(new_color(0)),
-            srgbByteFromLinear(new_color(1)),
-            srgbByteFromLinear(new_color(2)));
+            cv::saturate_cast<uchar>(new_color(0)),
+            cv::saturate_cast<uchar>(new_color(1)),
+            cv::saturate_cast<uchar>(new_color(2)));
     };
 
     int num_pixels = image.total();
