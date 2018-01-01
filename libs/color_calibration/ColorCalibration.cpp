@@ -214,15 +214,20 @@ cv::Mat3b findColorChecker(
 
 cv::Mat3b bigChecker(const cv::Mat3b& checker)
 {
+    const int square_size = 50;
+    const int padding = 10;
+    const int cc = square_size + padding;
     cv::Mat3b big_checker(
-        checker.rows * 30 + 5, checker.cols * 30 + 5, cv::Vec3b(127, 127, 127));
-    cv::Rect square(0, 0, 25, 25);
+        checker.rows * cc + padding,
+        checker.cols * cc + padding,
+        cv::Vec3b(127, 127, 127));
+    cv::Rect square(0, 0, square_size, square_size);
     for (int i = 0; i < checker.rows; ++i)
     {
         for (int j = 0; j < checker.cols; ++j)
         {
-            square.x = 5 + 30 * j;
-            square.y = 5 + 30 * i;
+            square.x = padding + cc * j;
+            square.y = padding + cc * i;
             cv::rectangle(big_checker, square, checker(i, j), -1);
         }
     }
