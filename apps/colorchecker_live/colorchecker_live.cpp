@@ -51,9 +51,17 @@ Debugging tool for color correction with colorchecker calibration target.
             if (!last_successful_checker.empty())
             {
                 const double l1_norm = cv::norm(sample_checker, last_successful_checker, cv::NORM_L1);
-                LOG(INFO) << "L1 error norm compared to last sample: " << l1_norm;
-                const fs::path file_path = fs::path("frames") / fs::unique_path("%%%%-%%%%-%%%%-%%%%.png");
-                writeCvImage(file_path, frame);
+                if (l1_norm >= 1000)
+                {
+                    const fs::path file_path = fs::path("frames") / fs::unique_path("%%%%-%%%%-%%%%-%%%%.png");
+                    LOG(INFO) << "L1 error norm compared to last sample: " << l1_norm
+                        << " (writing frame to " << file_path << ")";
+                    writeCvImage(file_path, frame);
+                }
+                else
+                {
+                    LOG(INFO) << "L1 error norm compared to last sample: " << l1_norm;
+                }
             }
             last_successful_checker = sample_checker;
         }
