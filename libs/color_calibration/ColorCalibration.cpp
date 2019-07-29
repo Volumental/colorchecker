@@ -168,11 +168,11 @@ FindSquaresRetVal findSquares(
                 lengths[a] = cv::norm(simple_contour[a] - simple_contour[b]);
             }
             const double mean_length = cv::mean(lengths)[0];
-            const bool mean_length_vs_area_ok = (std::abs(mean_length * mean_length - area) < area * 0.1);
+            const bool mean_length_vs_area_ok = (std::abs(mean_length * mean_length - area) < area * 0.2);
 
             const bool even_lengths = komb::all_of(lengths, [&mean_length](float length)
             {
-                 return std::abs(length - mean_length) <= mean_length * 0.1f;
+                 return std::abs(length - mean_length) <= mean_length * 0.2f;
             });
 
             if (mean_length_vs_area_ok && even_lengths)
@@ -184,8 +184,9 @@ FindSquaresRetVal findSquares(
             if (!canvas.empty())
             {
                 const cv::Scalar color =
-                    even_lengths && mean_length_vs_area_ok ? cv::Scalar(0, 255, 0) :
-                    even_lengths || mean_length_vs_area_ok ? cv::Scalar(0, 127, 255) :
+                    even_lengths && mean_length_vs_area_ok ? cv::Scalar(0, 196, 0) :
+                    !even_lengths && mean_length_vs_area_ok ? cv::Scalar(196, 32, 255) :
+                    even_lengths && !mean_length_vs_area_ok ? cv::Scalar(0, 127, 255) :
                     cv::Scalar(0, 0, 255);
                 polyLinesSubPix(canvas, simple_contour, true, color, 1);
             }
@@ -219,7 +220,7 @@ cv::Mat3b findColorChecker(
     for (const auto i : indices(squares.sizes))
     {
         const auto& square_contour = squares.contours[i];
-        if (std::abs(squares.sizes[i] - median_square_size) < median_square_size * 0.2)
+        if (std::abs(squares.sizes[i] - median_square_size) < median_square_size * 0.4)
         {
             cv::Scalar center = cv::mean(square_contour);
             square_centers.push_back(
@@ -241,7 +242,7 @@ cv::Mat3b findColorChecker(
         }
         else if (!canvas.empty())
         {
-            cv::Scalar color = cv::Scalar(0, 255, 255);
+            cv::Scalar color = cv::Scalar(0, 196, 255);
             polyLinesSubPix(canvas, square_contour, true, color, 1);
         }
     }
