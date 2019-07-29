@@ -164,13 +164,13 @@ FindSquaresRetVal findSquares(
             std::vector<double> lengths(simple_contour.size());
             for (const auto a : indices(simple_contour))
             {
-                auto b = (a + 1) % simple_contour.size();
+                const auto b = (a + 1) % simple_contour.size();
                 lengths[a] = cv::norm(simple_contour[a] - simple_contour[b]);
             }
-            double mean_length = cv::mean(lengths)[0];
-            bool mean_length_vs_area_ok = (std::abs(mean_length * mean_length - area) < area * 0.1);
+            const double mean_length = cv::mean(lengths)[0];
+            const bool mean_length_vs_area_ok = (std::abs(mean_length * mean_length - area) < area * 0.1);
 
-            bool even_lengths = komb::all_of(lengths, [&mean_length](float length)
+            const bool even_lengths = komb::all_of(lengths, [&mean_length](float length)
             {
                  return std::abs(length - mean_length) <= mean_length * 0.1f;
             });
@@ -183,7 +183,7 @@ FindSquaresRetVal findSquares(
 
             if (!canvas.empty())
             {
-                cv::Scalar color =
+                const cv::Scalar color =
                     even_lengths && mean_length_vs_area_ok ? cv::Scalar(0, 255, 0) :
                     even_lengths || mean_length_vs_area_ok ? cv::Scalar(0, 127, 255) :
                     cv::Scalar(0, 0, 255);
