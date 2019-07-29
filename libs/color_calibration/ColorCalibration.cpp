@@ -105,7 +105,7 @@ cv::Mat3b findColorChecker(
     for (const auto i : indices(squares.sizes))
     {
         const auto& square_contour = squares.contours[i];
-        if (std::abs(squares.sizes[i] - median_square_size) < median_square_size * 0.1)
+        if (std::abs(squares.sizes[i] - median_square_size) < median_square_size * 0.2)
         {
             cv::Scalar center = cv::mean(square_contour);
             square_centers.push_back(
