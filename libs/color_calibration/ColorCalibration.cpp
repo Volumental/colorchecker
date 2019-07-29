@@ -141,13 +141,13 @@ cv::Mat3b findColorChecker(
 
     auto get_x = [](const cv::Point2f& p){ return p.x; };
     auto get_y = [](const cv::Point2f& p){ return p.y; };
-    float min_x = pickSmallest(adjusted_centers, get_x).x;
-    float max_x = pickLargest(adjusted_centers, get_x).x;
-    float min_y = pickSmallest(adjusted_centers, get_y).y;
-    float max_y = pickLargest(adjusted_centers, get_y).y;
+    const float min_x = pickSmallest(adjusted_centers, get_x).x;
+    const float max_x = pickLargest(adjusted_centers, get_x).x;
+    const float min_y = pickSmallest(adjusted_centers, get_y).y;
+    const float max_y = pickLargest(adjusted_centers, get_y).y;
 
-    int num_cols = 6;
-    int num_rows = 4;
+    const int num_cols = 6;
+    const int num_rows = 4;
 
     for (auto& adjusted : adjusted_centers)
     {
