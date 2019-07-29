@@ -125,6 +125,11 @@ cv::Mat3b findColorChecker(
                 }
             }
         }
+        else if (!canvas.empty())
+        {
+            cv::Scalar color = cv::Scalar(0, 255, 255);
+            cv::polylines(canvas, square_contour, true, color);
+        }
     }
     VLOG(1) << "Picked " << square_centers.size() << " of " << squares.sizes.size() << " squares.";
 
