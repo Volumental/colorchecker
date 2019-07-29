@@ -17,7 +17,13 @@
 
 namespace komb {
 
-std::pair<std::vector<std::vector<cv::Point>>, std::vector<double>> findSquares(
+struct FindSquaresRetVal
+{
+    std::vector<std::vector<cv::Point>> contours;
+    std::vector<double> sizes;
+};
+
+FindSquaresRetVal findSquares(
     const cv::Mat3b& image, cv::Mat3b& canvas)
 {
     CHECK(!image.empty());
@@ -79,17 +85,15 @@ cv::Mat3b findColorChecker(
 {
     CHECK(!image.empty());
 
-    std::vector<std::vector<cv::Point>> square_contours;
-    std::vector<double> square_sizes;
-    std::tie(square_contours, square_sizes) = findSquares(image, canvas);
+    const FindSquaresRetVal squares = findSquares(image, canvas);
 
-    if (square_sizes.size() == 0)
+    if (squares.sizes.size() == 0)
     {
         LOG(WARNING) << "Found no squares";
         return cv::Mat();
     }
 
-    auto square_sizes_copy = square_sizes;
+    auto square_sizes_copy = squares.sizes;
     komb::nth_element(square_sizes_copy, square_sizes_copy.size() / 2);
     double median_square_size = square_sizes_copy[square_sizes_copy.size() / 2];
 
@@ -98,18 +102,19 @@ cv::Mat3b findColorChecker(
     std::vector<cv::Point> square_centers;
     cv::Vec2f x_axis;
     cv::Vec2f y_axis;
-    for (const auto i : indices(square_sizes))
+    for (const auto i : indices(squares.sizes))
     {
-        if (std::abs(square_sizes[i] - median_square_size) < median_square_size * 0.1)
+        const auto& square_contour = squares.contours[i];
+        if (std::abs(squares.sizes[i] - median_square_size) < median_square_size * 0.1)
         {
-            cv::Scalar center = cv::mean(square_contours[i]);
+            cv::Scalar center = cv::mean(square_contour);
             square_centers.push_back(
                 cv::Point(komb::roundToInt(center[0]), komb::roundToInt(center[1])));
 
             for (int a = 0; a < 4; ++a)
             {
                 auto b = (a + 1) & 3;
-                cv::Point2f vec(square_contours[i][a] - square_contours[i][b]);
+                cv::Point2f vec(square_contour[a] - square_contour[b]);
                 if (std::abs(vec.x) > std::abs(vec.y))
                 {
                     x_axis += cv::Vec2f(vec.x > 0 ? vec : -vec);
@@ -121,7 +126,7 @@ cv::Mat3b findColorChecker(
             }
         }
     }
-    VLOG(1) << "Picked " << square_centers.size() << " of " << square_sizes.size() << " squares.";
+    VLOG(1) << "Picked " << square_centers.size() << " of " << squares.sizes.size() << " squares.";
 
     x_axis = cv::normalize(x_axis);
     y_axis = cv::normalize(y_axis);
