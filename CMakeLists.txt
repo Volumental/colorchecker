@@ -73,6 +73,7 @@ add_subdirectory(test)
 # -----------------------------------------------------------------------------
 
 add_subdirectory(apps/colorchecker_calibrator)
+add_subdirectory(apps/colorchecker_live)
 add_subdirectory(libs/color_calibration)
 add_subdirectory(libs/common)
 add_subdirectory(libs/file_io_toolbox)
