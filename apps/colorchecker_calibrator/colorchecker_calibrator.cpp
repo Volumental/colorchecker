@@ -82,10 +82,13 @@ Debugging tool for color correction with colorchecker calibration target.
         LOG(INFO) << "Adjusted checker sample median absolute deviation: "
                   << medianAbsoluteDeviation(adjusted_checker, reference_checker);
 
-        cv::imshow("Original image", camera_image);
-        cv::Mat3b adjusted_image = camera_image.clone();
-        applyColorTransformation(adjusted_image, color_transformation);
-        cv::imshow("Adjusted image", adjusted_image);
+        if (!camera_image.empty())
+        {
+            cv::imshow("Original image", camera_image);
+            cv::Mat3b adjusted_image = camera_image.clone();
+            applyColorTransformation(adjusted_image, color_transformation);
+            cv::imshow("Adjusted image", adjusted_image);
+        }
     }
 
     while ((cv::waitKey(0) & 255) != 27)
