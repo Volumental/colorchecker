@@ -28,6 +28,14 @@ cv::Mat3b preprocess(const cv::Mat3b& image)
     return preprocessed_image;
 }
 
+void moveSampleToDir(const fs::path& sample_path, const fs::path& target_dir)
+{
+    const fs::path target_path = target_dir / sample_path.filename();
+    LOG(INFO) << "Moving " << sample_path << " to " << target_path;
+    createDirectories(target_dir);
+    fs::rename(sample_path, target_path);
+}
+
 int main(int argc, char* argv[])
 {
     google::SetUsageMessage(R"(
@@ -104,6 +112,18 @@ Debugging tool for color correction with colorchecker calibration target.
         if (key == 27) // ESC
         {
             return 0;
+        }
+        else if (key == 'g')
+        {
+            moveSampleToDir(sample_path, fs::path("frames") / "good");
+        }
+        else if (key == 'b')
+        {
+            moveSampleToDir(sample_path, fs::path("frames") / "bad");
+        }
+        else if (key == 'c')
+        {
+            moveSampleToDir(sample_path, fs::path("frames") / "cropped");
         }
     }
     while ((cv::waitKey(0) & 255) != 27)
