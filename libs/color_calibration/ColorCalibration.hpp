@@ -4,6 +4,9 @@
 
 namespace komb {
 
+std::vector<cv::Point2f> simplifyContour(
+    const std::vector<cv::Point>& contour, cv::Mat3b& canvas);
+
 /**
  * @brief Detect and find colors of the squares in a colorchecker camera calibration target.
  * @param image

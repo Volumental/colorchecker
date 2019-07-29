@@ -11,6 +11,9 @@ target_link_libraries(color_calibration
     ${OpenCV_LIBS}
 )
 
+# Add test program for this library
+build_tests_for_library(color_calibration ${source})
+
 # clang
 target_compile_options(color_calibration PRIVATE -Wno-double-promotion)
 

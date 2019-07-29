@@ -9,17 +9,126 @@
 
 #include <common/algorithm/Container.hpp>
 #include <common/algorithm/Range.hpp>
+#include <common/algorithm/Vector.hpp>
+#include <common/Json.hpp>
 #include <common/Logging.hpp>
 #include <common/Math.hpp>
 #include <common/String.hpp>
 #include <image_toolbox/Magnitude.hpp>
 #include <image_toolbox/Tests.hpp>
+#include <image_toolbox/Visualization.hpp>
 
 namespace komb {
 
+std::vector<cv::Point2f> simplifyContour(
+    const std::vector<cv::Point>& contour, cv::Mat3b& canvas)
+{
+    Json contour_json = Json::array();
+    for (const auto& p : contour)
+    {
+        contour_json.push_back(Json::array({p.x, p.y}));
+    }
+    ERROR_CONTEXT("contour", &contour_json);
+
+    static unsigned int r = 14;
+
+    std::vector<cv::Point2f> shifted_contour;
+    for (const auto i : indices(contour))
+    {
+        const cv::Point2f a = contour[i];
+        const cv::Point2f b = contour[(i + 1) % contour.size()];
+        const cv::Point2f ab = b - a;
+        shifted_contour.push_back(a + ab * 0.01f);
+    }
+
+    std::vector<cv::Point2f> simple_contour;
+    cv::approxPolyDP(shifted_contour, simple_contour, 5, true);
+
+    Json simple_contour_json = Json::array();
+    for (const auto& p : simple_contour)
+    {
+        simple_contour_json.push_back(Json::array({p.x, p.y}));
+    }
+    ERROR_CONTEXT("simple_contour", &simple_contour_json);
+
+    if (simple_contour.size() < 3)
+    {
+        return simple_contour;
+    }
+
+    // Find last simplified point from contour.
+    size_t index_in_contour = shifted_contour.size();
+    while (index_in_contour > 0)
+    {
+        --index_in_contour;
+        if (shifted_contour[index_in_contour] == simple_contour.back())
+        {
+            break;
+        }
+    }
+
+    // Collect line segments divided by the simplified points.
+    size_t points_left_in_contour = shifted_contour.size();
+    std::vector<std::vector<cv::Point>> segments(1);
+    size_t index_in_simple_contour = 0;
+    while (points_left_in_contour > 0)
+    {
+        // Add to current segment.
+        segments.back().push_back(shifted_contour[index_in_contour]);
+
+        if (shifted_contour[index_in_contour] == simple_contour[index_in_simple_contour])
+        {
+            // Start a new segment.
+            segments.push_back({shifted_contour[index_in_contour]});
+            ++index_in_simple_contour;
+            CHECK_LT(index_in_simple_contour, simple_contour.size());
+        }
+
+        index_in_contour = (index_in_contour + 1) % shifted_contour.size();
+        --points_left_in_contour;
+    }
+    CHECK_EQ(segments.size(), simple_contour.size());
+
+    // Fit lines to the segments.
+    const std::vector<cv::Point3f> line_coordinates = map(segments,
+        [](const std::vector<cv::Point>& segment) -> cv::Point3f
+    {
+        // Line coordinates are (a, b, c) such that a*x + b*y + c = 0.
+        cv::Mat1f AtA(3, 3, 0.f);
+        for (const auto& p : segment)
+        {
+            cv::Mat1f A_row(1, 3);
+            A_row << p.x, p.y, 1;
+            AtA += A_row.t() * A_row;
+        }
+        cv::Mat1f eigenvalues;
+        cv::Mat1f eigenvectors;
+        cv::eigen(AtA, eigenvalues, eigenvectors);
+        cv::Mat1f fitted_line = eigenvectors.row(2);
+        VLOG(2) << "AtA:\n" << AtA;
+        VLOG(2) << "Fitted line:\n" << fitted_line;
+        return cv::Point3f(fitted_line);
+    });
+    CHECK_EQ(line_coordinates.size(), simple_contour.size());
+
+    // Create new points from the intersection of the lines.
+    for (const auto i : indices(line_coordinates))
+    {
+        const cv::Point3f& line_1 = line_coordinates[i];
+        const cv::Point3f& line_2 = line_coordinates[(i + 1) % line_coordinates.size()];
+        const cv::Point3f intersection = line_1.cross(line_2);
+        if (intersection.z != 0)
+        {
+            simple_contour[i].x = intersection.x / intersection.z;
+            simple_contour[i].y = intersection.y / intersection.z;
+        }
+    }
+    return simple_contour;
+}
+
 struct FindSquaresRetVal
 {
-    std::vector<std::vector<cv::Point>> contours;
+    std::vector<std::vector<cv::Point2f>> contours;
     std::vector<double> sizes;
 };
 
@@ -30,21 +139,26 @@ FindSquaresRetVal findSquares(
 
     std::vector<std::vector<cv::Point>> contours;
     cv::Mat areas = edgeMagnitude(image) <= 2;
-    cv::findContours(areas, contours, cv::RETR_LIST, cv::CHAIN_APPROX_TC89_L1);
+    cv::findContours(areas, contours, cv::RETR_LIST, cv::CHAIN_APPROX_NONE);
 
     if (!canvas.empty())
     {
         cv::drawContours(canvas, contours, -1, cv::Scalar(255, 255, 255));
     }
 
-    std::vector<std::vector<cv::Point>> square_contours;
+    std::vector<std::vector<cv::Point2f>> square_contours;
     std::vector<double> square_sizes;
     for (const auto& contour : contours)
     {
-        std::vector<cv::Point> simple_contour;
-        cv::approxPolyDP(contour, simple_contour, 15, true);
+        const double area = -cv::contourArea(contour, true);
 
-        double area = -cv::contourArea(contour, true);
+        if (area <= 0)
+        {
+            continue;
+        }
+
+        const std::vector<cv::Point2f> simple_contour = simplifyContour(contour, canvas);
+
         if (area > 0 && simple_contour.size() == 4)
         {
             std::vector<double> lengths(simple_contour.size());
@@ -73,7 +187,7 @@ FindSquaresRetVal findSquares(
                     even_lengths && mean_length_vs_area_ok ? cv::Scalar(0, 255, 0) :
                     even_lengths || mean_length_vs_area_ok ? cv::Scalar(0, 127, 255) :
                     cv::Scalar(0, 0, 255);
-                cv::polylines(canvas, simple_contour, true, color);
+                polyLinesSubPix(canvas, simple_contour, true, color, 1);
             }
         }
     }
@@ -128,7 +242,7 @@ cv::Mat3b findColorChecker(
         else if (!canvas.empty())
         {
             cv::Scalar color = cv::Scalar(0, 255, 255);
-            cv::polylines(canvas, square_contour, true, color);
+            polyLinesSubPix(canvas, square_contour, true, color, 1);
         }
     }
     VLOG(1) << "Picked " << square_centers.size() << " of " << squares.sizes.size() << " squares.";
