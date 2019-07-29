@@ -13,6 +13,7 @@
 #include <common/Math.hpp>
 #include <common/String.hpp>
 #include <image_toolbox/Magnitude.hpp>
+#include <image_toolbox/Tests.hpp>
 
 namespace komb {
 
@@ -195,6 +196,11 @@ cv::Mat3b findColorChecker(
             A_row << 1, row, col, row * row, col * col, row * col;
             cv::Mat1f xy = A_row * transformation_parameters;
             cv::Point center(std::round(xy(0)), std::round(xy(1)));
+            if (!isInsideImage(center, image))
+            {
+                LOG(WARNING) << "Predicted square center is outside the image.";
+                return cv::Mat();
+            }
             cv::Vec3b color = image.at<cv::Vec3b>(center);
             ordered_colors(row, col) = color;
 
