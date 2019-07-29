@@ -32,6 +32,7 @@ std::vector<cv::Point2f> simplifyContour(
 
     static unsigned int r = 14;
 
+    // The contour is shifted slightly to make the points unique.
     std::vector<cv::Point2f> shifted_contour;
     for (const auto i : indices(contour))
     {
