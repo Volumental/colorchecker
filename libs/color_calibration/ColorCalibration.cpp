@@ -185,7 +185,7 @@ FindSquaresRetVal findSquares(
             if (!canvas.empty())
             {
                 const cv::Scalar color =
-                    even_lengths && mean_length_vs_area_ok ? cv::Scalar(0, 196, 0) :
+                    even_lengths && mean_length_vs_area_ok ? cv::Scalar(0, 127, 0) :
                     !even_lengths && mean_length_vs_area_ok ? cv::Scalar(196, 32, 255) :
                     even_lengths && !mean_length_vs_area_ok ? cv::Scalar(0, 127, 255) :
                     cv::Scalar(0, 0, 255);
@@ -242,35 +242,46 @@ cv::Mat3b findColorChecker(
 
     VLOG(1) << "Median square size: " << median_square_size;
 
+    std::vector<size_t> median_friendly_squares_indices;
+    for (const auto i : indices(squares.sizes))
+    {
+        if (std::abs(squares.sizes[i] - median_square_size) < median_square_size * 0.4)
+        {
+            median_friendly_squares_indices.push_back(i);
+        }
+    }
+
+    if (!canvas.empty())
+    {
+        const cv::Scalar color = cv::Scalar(0, 255, 0);
+        for (const auto i : median_friendly_squares_indices)
+        {
+            const auto& square_contour = squares.contours[i];
+            polyLinesSubPix(canvas, square_contour, true, color, 1);
+        }
+    }
+
     std::vector<cv::Point2f> square_centers;
     cv::Vec2f x_axis;
     cv::Vec2f y_axis;
-    for (const auto i : indices(squares.sizes))
+    for (const auto i : median_friendly_squares_indices)
     {
         const auto& square_contour = squares.contours[i];
-        if (std::abs(squares.sizes[i] - median_square_size) < median_square_size * 0.4)
-        {
-            cv::Scalar center = cv::mean(square_contour);
-            square_centers.push_back(cv::Point(center[0], center[1]));
+        cv::Scalar center = cv::mean(square_contour);
+        square_centers.push_back(cv::Point(center[0], center[1]));
 
-            for (int a = 0; a < 4; ++a)
-            {
-                auto b = (a + 1) & 3;
-                cv::Point2f vec(square_contour[a] - square_contour[b]);
-                if (std::abs(vec.x) > std::abs(vec.y))
-                {
-                    x_axis += cv::Vec2f(vec.x > 0 ? vec : -vec);
-                }
-                else
-                {
-                    y_axis += cv::Vec2f(vec.y > 0 ? vec : -vec);
-                }
-            }
-        }
-        else if (!canvas.empty())
+        for (int a = 0; a < 4; ++a)
         {
-            cv::Scalar color = cv::Scalar(0, 196, 255);
-            polyLinesSubPix(canvas, square_contour, true, color, 1);
+            auto b = (a + 1) & 3;
+            cv::Point2f vec(square_contour[a] - square_contour[b]);
+            if (std::abs(vec.x) > std::abs(vec.y))
+            {
+                x_axis += cv::Vec2f(vec.x > 0 ? vec : -vec);
+            }
+            else
+            {
+                y_axis += cv::Vec2f(vec.y > 0 ? vec : -vec);
+            }
         }
     }
     VLOG(1) << "Picked " << square_centers.size() << " of " << squares.sizes.size() << " squares.";
