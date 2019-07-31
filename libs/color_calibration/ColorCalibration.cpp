@@ -196,6 +196,33 @@ FindSquaresRetVal findSquares(
     return {square_contours, square_sizes};
 }
 
+// Fit a multivariate polynomial that transforms source to destination.
+// Returns a 6x2 matrix M that maps vectors to points like this:
+// [1, x, y, x * x, y * y, x * y] * M = [u, v]
+cv::Mat1f fit2dPolynomial(
+    const std::vector<cv::Point2f>& source,
+    const std::vector<cv::Point2f>& destination)
+{
+    CHECK_EQ(source.size(), destination.size());
+    cv::Mat1f AtA(6, 6, 0.f);
+    cv::Mat1f AtB(6, 2, 0.f);
+    for (const auto i : indices(destination))
+    {
+        const float x = source[i].x;
+        const float y = source[i].y;
+        cv::Mat1f A_row(1, 6);
+        A_row << 1, x, y, x * x, y * y, x * y;
+        cv::Mat1f uv(destination[i], true);
+        AtA += A_row.t() * A_row;
+        AtB += A_row.t() * uv.t();
+    }
+    const cv::Mat1f M = AtA.inv() * AtB;
+    VLOG(2) << "AtA:\n" << AtA;
+    VLOG(2) << "AtB:\n" << AtB;
+    VLOG(2) << "Polynomial coefficients:\n" << M;
+    return M;
+}
+
 cv::Mat3b findColorChecker(
     const cv::Mat3b& image, cv::Mat3b& canvas)
 {
@@ -215,7 +242,7 @@ cv::Mat3b findColorChecker(
 
     VLOG(1) << "Median square size: " << median_square_size;
 
-    std::vector<cv::Point> square_centers;
+    std::vector<cv::Point2f> square_centers;
     cv::Vec2f x_axis;
     cv::Vec2f y_axis;
     for (const auto i : indices(squares.sizes))
@@ -224,8 +251,7 @@ cv::Mat3b findColorChecker(
         if (std::abs(squares.sizes[i] - median_square_size) < median_square_size * 0.4)
         {
             cv::Scalar center = cv::mean(square_contour);
-            square_centers.push_back(
-                cv::Point(komb::roundToInt(center[0]), komb::roundToInt(center[1])));
+            square_centers.push_back(cv::Point(center[0], center[1]));
 
             for (int a = 0; a < 4; ++a)
             {
@@ -296,22 +322,13 @@ cv::Mat3b findColorChecker(
     }
 
     // Fit a multivariate polynomial to get a function from row,col to image x,y.
-    cv::Mat1f AtA(6, 6, 0.f);
-    cv::Mat1f AtB(6, 2, 0.f);
-    for (const auto i : indices(square_centers))
+    const std::vector<cv::Point2f> square_row_cols = map(adjusted_centers,
+        [](const cv::Point2f& p)
     {
-        float row = std::round(adjusted_centers[i].y);
-        float col = std::round(adjusted_centers[i].x);
-        cv::Mat1f A_row(1, 6);
-        A_row << 1, row, col, row * row, col * col, row * col;
-        cv::Mat1f xy(square_centers[i], true);
-        AtA += A_row.t() * A_row;
-        AtB += A_row.t() * xy.t();
-    }
-    cv::Mat1f transformation_parameters = AtA.inv() * AtB;
-    VLOG(2) << "AtA:\n" << AtA;
-    VLOG(2) << "AtB:\n" << AtB;
-    VLOG(2) << "Transformation parameters:\n" << transformation_parameters;
+        return cv::Point2f(std::round(p.y), std::round(p.x));
+    });
+    const cv::Mat1f polynomial_row_col_terms_to_image_xy =
+        fit2dPolynomial(square_row_cols, square_centers);
 
     cv::Mat3b ordered_colors(num_rows, num_cols);
     for (int row : irange(num_rows))
@@ -320,7 +337,7 @@ cv::Mat3b findColorChecker(
         {
             cv::Mat1f A_row(1, 6);
             A_row << 1, row, col, row * row, col * col, row * col;
-            cv::Mat1f xy = A_row * transformation_parameters;
+            cv::Mat1f xy = A_row * polynomial_row_col_terms_to_image_xy;
             cv::Point center(std::round(xy(0)), std::round(xy(1)));
             if (!isInsideImage(center, image))
             {
