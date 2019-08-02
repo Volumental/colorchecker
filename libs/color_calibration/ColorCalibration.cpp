@@ -104,20 +104,26 @@ std::vector<cv::Point2f> simplifyContour(
         [](const std::vector<cv::Point>& segment) -> cv::Point3f
     {
         // Line coordinates are (a, b, c) such that a*x + b*y + c = 0.
-        cv::Mat1f AtA(3, 3, 0.f);
+        cv::Mat1d AtA(3, 3, 0.f);
+        const double k = 1.0e-3; // Arbitrary normalization.
         for (const auto& p : segment)
         {
-            cv::Mat1f A_row(1, 3);
-            A_row << p.x, p.y, 1;
+            cv::Mat1d A_row(1, 3);
+            double u = p.x * k;
+            double v = p.y * k;
+            A_row << u, v, 1;
             AtA += A_row.t() * A_row;
         }
-        cv::Mat1f eigenvalues;
-        cv::Mat1f eigenvectors;
+        cv::Mat1d eigenvalues;
+        cv::Mat1d eigenvectors;
         cv::eigen(AtA, eigenvalues, eigenvectors);
         cv::Mat1f fitted_line = eigenvectors.row(2);
         VLOG(2) << "AtA:\n" << AtA;
         VLOG(2) << "Fitted line:\n" << fitted_line;
-        return cv::Point3f(fitted_line);
+        return cv::Point3f(
+            fitted_line(0) * k,
+            fitted_line(1) * k,
+            fitted_line(2));
     });
     CHECK_EQ(line_coordinates.size(), simple_contour.size());
 
