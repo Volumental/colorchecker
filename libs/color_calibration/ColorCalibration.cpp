@@ -272,6 +272,78 @@ cv::Mat1f fit2dPolynomial(
     return M;
 }
 
+cv::Mat3b renderSquaresInBigOrthoView(
+    const cv::Mat3b& image,
+    const cv::Matx33f& ortho_view_from_image,
+    const FindSquaresRetVal& squares_in_ortho_view,
+    const std::vector<cv::Point2f>& square_centers_in_image,
+    const std::vector<cv::Point2f>& square_centers_in_ortho_view,
+    const std::vector<size_t>& median_friendly_squares_indices)
+{
+    const cv::Size canvas_size(800, 500);
+    const cv::Point canvas_center(canvas_size.width / 2, canvas_size.height / 2);
+    const int canvas_square_size = 40;
+    cv::Mat3b canvas;
+    const cv::Matx33f big_ortho_view_from_ortho_view(
+        canvas_square_size, 0, canvas_center.x - canvas_square_size / 2,
+        0, canvas_square_size, canvas_center.y - canvas_square_size / 2,
+        0, 0, 1);
+    const cv::Matx33f big_ortho_view_from_image =
+        big_ortho_view_from_ortho_view * ortho_view_from_image;
+    cv::warpPerspective(image, canvas,
+        big_ortho_view_from_image, canvas_size);
+    cv::line(canvas,
+        cv::Point(canvas_center.x, 0),
+        cv::Point(canvas_center.x, canvas_size.height),
+        kWhite);
+    cv::line(canvas,
+        cv::Point(0, canvas_center.y),
+        cv::Point(canvas_size.width, canvas_center.y),
+        kWhite);
+
+    std::vector<bool> is_square_friendly(squares_in_ortho_view.contours.size(), false);
+    for (const auto i : median_friendly_squares_indices)
+    {
+        is_square_friendly[i] = true;
+    }
+    for (const auto i : indices(squares_in_ortho_view.contours))
+    {
+        auto square_contour_in_big_ortho_view =
+            squares_in_ortho_view.contours[i];
+        cv::perspectiveTransform(
+            squares_in_ortho_view.contours[i],
+            square_contour_in_big_ortho_view,
+            big_ortho_view_from_ortho_view);
+        const auto color = is_square_friendly[i] ? kBrightGreen : kDarkGreen;
+        polyLinesSubPix(canvas,
+            square_contour_in_big_ortho_view, true, color, 1);
+    }
+
+    const auto square_centers_in_image_in_big_ortho_view = square_centers_in_image;
+    cv::perspectiveTransform(
+        square_centers_in_image,
+        square_centers_in_image_in_big_ortho_view,
+        big_ortho_view_from_image);
+
+    const auto square_centers_in_ortho_view_in_big_ortho_view = square_centers_in_ortho_view;
+    cv::perspectiveTransform(
+        square_centers_in_ortho_view,
+        square_centers_in_ortho_view_in_big_ortho_view,
+        big_ortho_view_from_ortho_view);
+
+    for (const auto& center : square_centers_in_image_in_big_ortho_view)
+    {
+        cv::drawMarker(canvas, center, kWhite, cv::MARKER_SQUARE, 8);
+    }
+
+    for (const auto& center : square_centers_in_ortho_view_in_big_ortho_view)
+    {
+        cv::drawMarker(canvas, center, kWhite, cv::MARKER_TILTED_CROSS, 8);
+    }
+
+    return canvas;
+}
+
 cv::Mat3b findColorChecker(
     const cv::Mat3b& image, cv::Mat3b& canvas)
 {
@@ -285,20 +357,45 @@ cv::Mat3b findColorChecker(
         return cv::Mat();
     }
 
-    auto square_sizes_copy = squares.sizes;
-    komb::nth_element(square_sizes_copy, square_sizes_copy.size() / 2);
-    double median_square_size = square_sizes_copy[square_sizes_copy.size() / 2];
+    std::vector<size_t> square_indices_by_size = makeVector(indices(squares.sizes));
+    komb::sort(square_indices_by_size, [&squares](size_t i, size_t j)
+    {
+        return squares.sizes[i] < squares.sizes[j];
+    });
+    const size_t median_square_index = square_indices_by_size[squares.sizes.size() / 2];
+    const double median_square_size = squares.sizes[median_square_index];
 
     VLOG(1) << "Median square size: " << median_square_size;
 
-    std::vector<size_t> median_friendly_squares_indices;
-    for (const auto i : indices(squares.sizes))
+    const cv::Matx33f ortho_view_from_image =
+        getPerspectiveTransformFromSquare(squares.contours[median_square_index]);
+
+    FindSquaresRetVal squares_in_ortho_view;
+    squares_in_ortho_view.contours.resize(squares.contours.size());
+    squares_in_ortho_view.sizes.resize(squares.sizes.size());
+    for (const auto i : indices(squares.contours))
     {
-        if (std::abs(squares.sizes[i] - median_square_size) < median_square_size * 0.4)
+        cv::perspectiveTransform(
+            squares.contours[i],
+            squares_in_ortho_view.contours[i],
+            ortho_view_from_image);
+        squares_in_ortho_view.sizes[i] =
+            std::sqrt(cv::contourArea(squares_in_ortho_view.contours[i]));
+    }
+    const double median_square_size_in_ortho_view =
+        squares_in_ortho_view.sizes[median_square_index];
+
+    std::vector<size_t> median_friendly_squares_indices;
+    for (const auto i : indices(squares_in_ortho_view.sizes))
+    {
+        if (std::abs(squares_in_ortho_view.sizes[i] - median_square_size_in_ortho_view)
+            < median_square_size_in_ortho_view * 0.4)
         {
             median_friendly_squares_indices.push_back(i);
         }
     }
+    VLOG(1) << "Picked " << median_friendly_squares_indices.size()
+        << " of " << squares.sizes.size() << " squares.";
 
     if (!canvas.empty())
     {
@@ -309,85 +406,75 @@ cv::Mat3b findColorChecker(
         }
     }
 
-    std::vector<cv::Point2f> square_centers;
-    cv::Vec2f x_axis;
-    cv::Vec2f y_axis;
+    std::vector<cv::Point2f> square_centers_in_image;
+    std::vector<cv::Point2f> square_centers_in_ortho_view;
     for (const auto i : median_friendly_squares_indices)
     {
-        const auto& square_contour = squares.contours[i];
-        cv::Scalar center = cv::mean(square_contour);
-        square_centers.push_back(cv::Point(center[0], center[1]));
-
-        for (int a = 0; a < 4; ++a)
-        {
-            auto b = (a + 1) & 3;
-            cv::Point2f vec(square_contour[a] - square_contour[b]);
-            if (std::abs(vec.x) > std::abs(vec.y))
-            {
-                x_axis += cv::Vec2f(vec.x > 0 ? vec : -vec);
-            }
-            else
-            {
-                y_axis += cv::Vec2f(vec.y > 0 ? vec : -vec);
-            }
-        }
+        const cv::Scalar xy = cv::mean(squares.contours[i]);
+        square_centers_in_image.push_back(cv::Point2f(xy[0], xy[1]));
+        const cv::Scalar uv = cv::mean(squares_in_ortho_view.contours[i]);
+        square_centers_in_ortho_view.push_back(cv::Point2f(uv[0], uv[1]));
     }
-    VLOG(1) << "Picked " << square_centers.size() << " of " << squares.sizes.size() << " squares.";
 
-    x_axis = cv::normalize(x_axis);
-    y_axis = cv::normalize(y_axis);
-
-    cv::Point x_arrow = cv::Vec2i(x_axis * 20);
-    cv::Point y_arrow = cv::Vec2i(y_axis * 20);
-
-    cv::Mat1f map_from_image(2, 2);
-    map_from_image << x_axis[0], x_axis[1], y_axis[0], y_axis[1];
-
-    std::vector<cv::Point2f> adjusted_centers;
-    for (const auto& center : square_centers)
+    if (!canvas.empty())
     {
-        cv::Mat1f adjusted = map_from_image * (cv::Mat1f(2, 1) << center.x, center.y);
-        adjusted_centers.emplace_back(adjusted(0), adjusted(1));
+        cv::imshow("canvas_big_ortho_view", renderSquaresInBigOrthoView(
+            image, ortho_view_from_image,
+            squares_in_ortho_view,
+            square_centers_in_image,
+            square_centers_in_ortho_view,
+            median_friendly_squares_indices));
     }
 
     auto get_x = [](const cv::Point2f& p){ return p.x; };
     auto get_y = [](const cv::Point2f& p){ return p.y; };
-    const float min_x = pickSmallest(adjusted_centers, get_x).x;
-    const float max_x = pickLargest(adjusted_centers, get_x).x;
-    const float min_y = pickSmallest(adjusted_centers, get_y).y;
-    const float max_y = pickLargest(adjusted_centers, get_y).y;
+    const float min_x = pickSmallest(square_centers_in_ortho_view, get_x).x;
+    const float max_x = pickLargest(square_centers_in_ortho_view, get_x).x;
+    const float min_y = pickSmallest(square_centers_in_ortho_view, get_y).y;
+    const float max_y = pickLargest(square_centers_in_ortho_view, get_y).y;
 
     const int num_cols = 6;
     const int num_rows = 4;
 
-    for (auto& adjusted : adjusted_centers)
+    std::vector<cv::Point2f> square_centers_col_row;
+    for (const auto& center_in_ortho_view : square_centers_in_ortho_view)
     {
-        adjusted.x = (adjusted.x - min_x) / (max_x - min_x) * (num_cols - 1);
-        adjusted.y = (adjusted.y - min_y) / (max_y - min_y) * (num_rows - 1);
+        square_centers_col_row.emplace_back(
+            (center_in_ortho_view.x - min_x) / (max_x - min_x) * (num_cols - 1),
+            (center_in_ortho_view.y - min_y) / (max_y - min_y) * (num_rows - 1));
     }
 
-    for (const auto i : indices(square_centers))
+    if (!canvas.empty())
     {
-        const cv::Point& center = square_centers[i];
-        const cv::Point2f& adjusted_center = adjusted_centers[i];
-
-        if (!canvas.empty())
+        for (const auto i : indices(square_centers_in_image))
         {
-            cv::line(canvas, center, center + x_arrow, cv::Scalar(0, 0, 255));
-            cv::line(canvas, center, center + y_arrow, cv::Scalar(0, 255, 0));
-            cv::putText(canvas, strprintf("(%.0f, %.0f)", adjusted_center.x, adjusted_center.y),
-                center - cv::Point(20, 10), cv::FONT_HERSHEY_PLAIN, .75, cv::Scalar(255, 255, 255));
+            const cv::Point xy = square_centers_in_image[i];
+            const auto& uv = square_centers_in_ortho_view[i];
+            const auto& col_row = square_centers_col_row[i];
+            std::vector<cv::Point2f> arrows_uv = {
+                uv,
+                uv + cv::Point2f(0.5f, 0.0f),
+                uv + cv::Point2f(0.0f, 0.5f),
+            };
+            std::vector<cv::Point2f> arrows_xy(arrows_uv.size());
+            cv::perspectiveTransform(arrows_uv, arrows_xy, ortho_view_from_image.inv());
+            cv::line(canvas, arrows_xy[0], arrows_xy[1], kRed);
+            cv::line(canvas, arrows_xy[0], arrows_xy[2], kBrightGreen);
+            cv::drawMarker(canvas, xy, kWhite, cv::MARKER_SQUARE, 8);
+            cv::drawMarker(canvas, arrows_xy[0], kWhite, cv::MARKER_TILTED_CROSS, 8);
+            cv::putText(canvas, strprintf("(%.0f, %.0f)", col_row.x, col_row.y),
+                xy - cv::Point(20, 10), cv::FONT_HERSHEY_PLAIN, .75, kWhite);
         }
     }
 
     // Fit a multivariate polynomial to get a function from row,col to image x,y.
-    const std::vector<cv::Point2f> square_row_cols = map(adjusted_centers,
+    const std::vector<cv::Point2f> square_row_cols = map(square_centers_col_row,
         [](const cv::Point2f& p)
     {
         return cv::Point2f(std::round(p.y), std::round(p.x));
     });
     const cv::Mat1f polynomial_row_col_terms_to_image_xy =
-        fit2dPolynomial(square_row_cols, square_centers);
+        fit2dPolynomial(square_row_cols, square_centers_in_image);
 
     cv::Mat3b ordered_colors(num_rows, num_cols);
     for (int row : irange(num_rows))
