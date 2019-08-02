@@ -20,6 +20,15 @@
 
 namespace komb {
 
+namespace {
+const cv::Scalar kBrightGreen(0, 255, 0);
+const cv::Scalar kDarkGreen(0, 127, 0);
+const cv::Scalar kPink(196, 32, 255);
+const cv::Scalar kOrange(0, 127, 255);
+const cv::Scalar kRed(0, 0, 255);
+const cv::Scalar kWhite(255, 255, 255);
+} // namespace
+
 std::vector<cv::Point2f> simplifyContour(
     const std::vector<cv::Point>& contour, cv::Mat3b& canvas)
 {
@@ -144,7 +153,7 @@ FindSquaresRetVal findSquares(
 
     if (!canvas.empty())
     {
-        cv::drawContours(canvas, contours, -1, cv::Scalar(255, 255, 255));
+        cv::drawContours(canvas, contours, -1, kWhite);
     }
 
     std::vector<std::vector<cv::Point2f>> square_contours;
@@ -185,10 +194,10 @@ FindSquaresRetVal findSquares(
             if (!canvas.empty())
             {
                 const cv::Scalar color =
-                    even_lengths && mean_length_vs_area_ok ? cv::Scalar(0, 127, 0) :
-                    !even_lengths && mean_length_vs_area_ok ? cv::Scalar(196, 32, 255) :
-                    even_lengths && !mean_length_vs_area_ok ? cv::Scalar(0, 127, 255) :
-                    cv::Scalar(0, 0, 255);
+                    even_lengths && mean_length_vs_area_ok ? kDarkGreen :
+                    !even_lengths && mean_length_vs_area_ok ? kPink :
+                    even_lengths && !mean_length_vs_area_ok ? kOrange :
+                    kRed;
                 polyLinesSubPix(canvas, simple_contour, true, color, 1);
             }
         }
@@ -253,11 +262,10 @@ cv::Mat3b findColorChecker(
 
     if (!canvas.empty())
     {
-        const cv::Scalar color = cv::Scalar(0, 255, 0);
         for (const auto i : median_friendly_squares_indices)
         {
             const auto& square_contour = squares.contours[i];
-            polyLinesSubPix(canvas, square_contour, true, color, 1);
+            polyLinesSubPix(canvas, square_contour, true, kBrightGreen, 1);
         }
     }
 
@@ -358,13 +366,10 @@ cv::Mat3b findColorChecker(
             cv::Vec3b color = image.at<cv::Vec3b>(center);
             ordered_colors(row, col) = color;
 
-            cv::Scalar contrast_color = color.dot(color / 255) < 255 ?
-                cv::Scalar::all(255) : cv::Scalar::all(0);
-
             if (!canvas.empty())
             {
-                cv::circle(canvas, center, 1, contrast_color, -1);
-                cv::circle(canvas, center, 6, contrast_color, 1);
+                cv::circle(canvas, center, 1, kWhite, -1);
+                cv::circle(canvas, center, 6, kWhite, 1);
             }
         }
     }
