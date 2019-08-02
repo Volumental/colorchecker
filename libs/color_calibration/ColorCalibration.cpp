@@ -248,6 +248,18 @@ cv::Matx33f getPerspectiveTransformFromSquare(
     return M;
 }
 
+cv::Matx33f getAveragePerspectiveTransformFromSquares(
+    const std::vector<std::vector<cv::Point2f>>& square_contours)
+{
+    cv::Matx33d image_from_ortho_view_sum = cv::Matx33d::zeros();
+    for (const auto& contour : square_contours)
+    {
+        const cv::Matx33d ortho_view_from_image = getPerspectiveTransformFromSquare(contour);
+        image_from_ortho_view_sum += ortho_view_from_image.inv();
+    }
+    return (image_from_ortho_view_sum * (1.0 / image_from_ortho_view_sum(2, 2))).inv();
+}
+
 cv::Matx33f getPerspectiveTransformFromSquares(
     const cv::Matx33f pre_ortho_view_from_image,
     const std::vector<std::vector<cv::Point2f>>& square_contours)
@@ -437,7 +449,7 @@ cv::Mat3b findColorChecker(
     VLOG(1) << "Median square size: " << median_square_size;
 
     const cv::Matx33f ortho_view_from_image =
-        getPerspectiveTransformFromSquare(squares.contours[median_square_index]);
+        getAveragePerspectiveTransformFromSquares(squares.contours);
 
     FindSquaresRetVal squares_in_ortho_view;
     squares_in_ortho_view.contours.resize(squares.contours.size());
