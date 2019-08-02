@@ -383,26 +383,30 @@ cv::Mat3b renderSquaresInBigOrthoView(
             square_contour_in_big_ortho_view, true, color, 1);
     }
 
-    const auto square_centers_in_image_in_big_ortho_view = square_centers_in_image;
-    cv::perspectiveTransform(
-        square_centers_in_image,
-        square_centers_in_image_in_big_ortho_view,
-        big_ortho_view_from_image);
-
-    const auto square_centers_in_ortho_view_in_big_ortho_view = square_centers_in_ortho_view;
-    cv::perspectiveTransform(
-        square_centers_in_ortho_view,
-        square_centers_in_ortho_view_in_big_ortho_view,
-        big_ortho_view_from_ortho_view);
-
-    for (const auto& center : square_centers_in_image_in_big_ortho_view)
+    if (!square_centers_in_image.empty())
     {
-        cv::drawMarker(canvas, center, kWhite, cv::MARKER_SQUARE, 8);
+        const auto square_centers_in_image_in_big_ortho_view = square_centers_in_image;
+        cv::perspectiveTransform(
+            square_centers_in_image,
+            square_centers_in_image_in_big_ortho_view,
+            big_ortho_view_from_image);
+        for (const auto& center : square_centers_in_image_in_big_ortho_view)
+        {
+            cv::drawMarker(canvas, center, kWhite, cv::MARKER_SQUARE, 8);
+        }
     }
 
-    for (const auto& center : square_centers_in_ortho_view_in_big_ortho_view)
+    if (!square_centers_in_ortho_view.empty())
     {
-        cv::drawMarker(canvas, center, kWhite, cv::MARKER_TILTED_CROSS, 8);
+        const auto square_centers_in_ortho_view_in_big_ortho_view = square_centers_in_ortho_view;
+        cv::perspectiveTransform(
+            square_centers_in_ortho_view,
+            square_centers_in_ortho_view_in_big_ortho_view,
+            big_ortho_view_from_ortho_view);
+        for (const auto& center : square_centers_in_ortho_view_in_big_ortho_view)
+        {
+            cv::drawMarker(canvas, center, kWhite, cv::MARKER_TILTED_CROSS, 8);
+        }
     }
 
     return canvas;
