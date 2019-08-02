@@ -228,6 +228,7 @@ cv::Matx33f getPerspectiveTransformFromSquare(
         const float u = p.x < center[0] ? 0 : 1;
         const float v = p.y < center[1] ? 0 : 1;
 
+        // Add constraints for absolute positions.
         A_row << x, y, 1, 0, 0, 0, -x * u, -y * u;
         AtA += A_row.t() * A_row;
         AtB += A_row.t() * u;
@@ -235,6 +236,69 @@ cv::Matx33f getPerspectiveTransformFromSquare(
         AtA += A_row.t() * A_row;
         AtB += A_row.t() * v;
     }
+
+    VLOG(2) << "Single square solve:";
+    VLOG(2) << "AtA:\n" << AtA;
+    VLOG(2) << "AtB:\n" << AtB;
+
+    cv::Mat M(3, 3, CV_64F), X(8, 1, CV_64F, M.ptr());
+    cv::solve(AtA, AtB, X);
+    M.ptr<double>()[8] = 1.;
+    VLOG(2) << "Matrix coefficients:\n" << M;
+    return M;
+}
+
+cv::Matx33f getPerspectiveTransformFromSquares(
+    const cv::Matx33f pre_ortho_view_from_image,
+    const std::vector<std::vector<cv::Point2f>>& square_contours)
+{
+    cv::Mat1d AtA(8, 8, 0.f);
+    cv::Mat1d AtB(8, 1, 0.f);
+
+    // Add prior.
+    {
+        AtA.diag() = 1;
+        const cv::Mat1f M(pre_ortho_view_from_image);
+        for (const auto i : irange(8))
+        {
+            AtB(i) = M(i);
+        }
+    }
+
+    // Add constraints for relative positions.
+    cv::Mat1d A_row(1, 8);
+    cv::Mat1d A_row0(1, 8);
+    cv::Mat1d A_row1(1, 8);
+    for (const auto& contour : square_contours)
+    {
+        auto contour_in_pre_ortho_view = contour;
+        cv::perspectiveTransform(
+            contour,
+            contour_in_pre_ortho_view,
+            pre_ortho_view_from_image);
+        for (const auto i : indices(contour))
+        {
+            const auto j = (i + 1) % contour.size();
+            const auto& p0 = contour[i];
+            const auto& p1 = contour[j];
+            const auto& uv0 = contour_in_pre_ortho_view[i];
+            const auto& uv1 = contour_in_pre_ortho_view[j];
+
+            A_row0 << p0.x, p0.y, 1, 0, 0, 0, -p0.x * uv0.x, -p0.y * uv0.x;
+            A_row1 << p1.x, p1.y, 1, 0, 0, 0, -p1.x * uv1.x, -p1.y * uv1.x;
+            A_row = A_row1 - A_row0;
+            AtA += A_row.t() * A_row;
+            AtB += A_row.t() * std::round(uv1.x - uv0.x);
+
+            A_row0 << 0, 0, 0, p0.x, p0.y, 1, -p0.x * uv0.y, -p0.y * uv0.y;
+            A_row1 << 0, 0, 0, p1.x, p1.y, 1, -p1.x * uv1.y, -p1.y * uv1.y;
+            A_row = A_row1 - A_row0;
+            AtA += A_row.t() * A_row;
+            AtB += A_row.t() * std::round(uv1.y - uv0.y);
+        }
+    }
+
+    VLOG(2) << "Multiple square solve:";
     VLOG(2) << "AtA:\n" << AtA;
     VLOG(2) << "AtB:\n" << AtB;
 
@@ -347,6 +411,7 @@ cv::Mat3b renderSquaresInBigOrthoView(
 cv::Mat3b findColorChecker(
     const cv::Mat3b& image, cv::Mat3b& canvas)
 {
+    LOG_SCOPE_F(1, "findColorChecker");
     CHECK(!image.empty());
 
     const FindSquaresRetVal squares = findSquares(image, canvas);
