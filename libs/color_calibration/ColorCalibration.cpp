@@ -211,6 +211,40 @@ FindSquaresRetVal findSquares(
     return {square_contours, square_sizes};
 }
 
+cv::Matx33f getPerspectiveTransformFromSquare(
+    const std::vector<cv::Point2f>& sample_square_contour)
+{
+    CHECK_EQ(sample_square_contour.size(), 4);
+    const cv::Scalar center = cv::mean(sample_square_contour);
+
+    cv::Mat1d AtA(8, 8, 0.f);
+    cv::Mat1d AtB(8, 1, 0.f);
+    cv::Mat1d A_row(1, 8);
+    for (const auto& p : sample_square_contour)
+    {
+        // TODO(Rasmus): Add normalization for numerical stability.
+        const float x = p.x;
+        const float y = p.y;
+        const float u = p.x < center[0] ? 0 : 1;
+        const float v = p.y < center[1] ? 0 : 1;
+
+        A_row << x, y, 1, 0, 0, 0, -x * u, -y * u;
+        AtA += A_row.t() * A_row;
+        AtB += A_row.t() * u;
+        A_row << 0, 0, 0, x, y, 1, -x * v, -y * v;
+        AtA += A_row.t() * A_row;
+        AtB += A_row.t() * v;
+    }
+    VLOG(2) << "AtA:\n" << AtA;
+    VLOG(2) << "AtB:\n" << AtB;
+
+    cv::Mat M(3, 3, CV_64F), X(8, 1, CV_64F, M.ptr());
+    cv::solve(AtA, AtB, X);
+    M.ptr<double>()[8] = 1.;
+    VLOG(2) << "Matrix coefficients:\n" << M;
+    return M;
+}
+
 // Fit a multivariate polynomial that transforms source to destination.
 // Returns a 6x2 matrix M that maps vectors to points like this:
 // [1, x, y, x * x, y * y, x * y] * M = [u, v]
