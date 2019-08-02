@@ -495,6 +495,12 @@ cv::Mat3b findColorChecker(
             median_friendly_squares_indices));
     }
 
+    if (median_friendly_squares_indices.empty())
+    {
+        LOG(WARNING) << "Found no median friendly squares";
+        return cv::Mat();
+    }
+
     auto get_x = [](const cv::Point2f& p){ return p.x; };
     auto get_y = [](const cv::Point2f& p){ return p.y; };
     const float min_x = pickSmallest(square_centers_in_ortho_view, get_x).x;
