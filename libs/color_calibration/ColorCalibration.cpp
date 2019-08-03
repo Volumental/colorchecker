@@ -211,6 +211,52 @@ FindSquaresRetVal findSquares(
     return {square_contours, square_sizes};
 }
 
+size_t getMedianSquareIndex(const FindSquaresRetVal& squares)
+{
+    std::vector<size_t> square_indices_by_size = makeVector(indices(squares.sizes));
+    komb::sort(square_indices_by_size, [&squares](size_t i, size_t j)
+    {
+        return squares.sizes[i] < squares.sizes[j];
+    });
+    const size_t median_square_index = square_indices_by_size[squares.sizes.size() / 2];
+    return median_square_index;
+}
+
+std::vector<size_t> filterSquaresBySize(
+    const FindSquaresRetVal& squares,
+    float max_fractional_length_difference)
+{
+    const double median_square_size = squares.sizes[getMedianSquareIndex(squares)];
+    VLOG(1) << "Median square size: " << median_square_size;
+    std::vector<size_t> median_friendly_squares_indices;
+    for (const auto i : indices(squares.sizes))
+    {
+        const float smaller_size = std::min(squares.sizes[i], median_square_size);
+        const float bigger_size = std::max(squares.sizes[i], median_square_size);
+        // fractional_length_difference = (bigger_size - smaller_size) / bigger_size;
+        if (bigger_size - smaller_size <= bigger_size * max_fractional_length_difference)
+        {
+            median_friendly_squares_indices.push_back(i);
+        }
+    }
+    VLOG(1) << "Picked " << median_friendly_squares_indices.size()
+        << " of " << squares.sizes.size() << " squares.";
+    return median_friendly_squares_indices;
+}
+
+FindSquaresRetVal pickSquaresByIndices(
+    const FindSquaresRetVal& squares,
+    const std::vector<size_t>& indices)
+{
+    FindSquaresRetVal out;
+    for (const auto i : indices)
+    {
+        out.contours.push_back(squares.contours[i]);
+        out.sizes.push_back(squares.sizes[i]);
+    }
+    return out;
+}
+
 cv::Matx33f getPerspectiveTransformFromSquare(
     const std::vector<cv::Point2f>& sample_square_contour)
 {
@@ -489,18 +535,11 @@ cv::Mat3b findColorChecker(
         return cv::Mat();
     }
 
-    std::vector<size_t> square_indices_by_size = makeVector(indices(squares.sizes));
-    komb::sort(square_indices_by_size, [&squares](size_t i, size_t j)
-    {
-        return squares.sizes[i] < squares.sizes[j];
-    });
-    const size_t median_square_index = square_indices_by_size[squares.sizes.size() / 2];
-    const double median_square_size = squares.sizes[median_square_index];
-
-    VLOG(1) << "Median square size: " << median_square_size;
+    const FindSquaresRetVal median_friendly_squares_in_image =
+        pickSquaresByIndices(squares, filterSquaresBySize(squares, 0.5));
 
     const cv::Matx33f ortho_view_from_image =
-        getPerspectiveTransformFromAllSquares(squares.contours);
+        getPerspectiveTransformFromAllSquares(median_friendly_squares_in_image.contours);
 
     FindSquaresRetVal squares_in_ortho_view;
     squares_in_ortho_view.contours.resize(squares.contours.size());
@@ -514,20 +553,9 @@ cv::Mat3b findColorChecker(
         squares_in_ortho_view.sizes[i] =
             std::sqrt(cv::contourArea(squares_in_ortho_view.contours[i]));
     }
-    const double median_square_size_in_ortho_view =
-        squares_in_ortho_view.sizes[median_square_index];
 
-    std::vector<size_t> median_friendly_squares_indices;
-    for (const auto i : indices(squares_in_ortho_view.sizes))
-    {
-        if (std::abs(squares_in_ortho_view.sizes[i] - median_square_size_in_ortho_view)
-            < median_square_size_in_ortho_view * 0.4)
-        {
-            median_friendly_squares_indices.push_back(i);
-        }
-    }
-    VLOG(1) << "Picked " << median_friendly_squares_indices.size()
-        << " of " << squares.sizes.size() << " squares.";
+    const std::vector<size_t> median_friendly_squares_indices =
+        filterSquaresBySize(squares_in_ortho_view, 0.3);
 
     if (!canvas.empty())
     {
