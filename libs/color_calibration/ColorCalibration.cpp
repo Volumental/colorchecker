@@ -261,53 +261,94 @@ cv::Matx33f getAveragePerspectiveTransformFromSquares(
     return (image_from_ortho_view_sum * (1.0 / image_from_ortho_view_sum(2, 2))).inv(cv::DECOMP_SVD);
 }
 
-cv::Matx33f getPerspectiveTransformFromSquares(
-    const cv::Matx33f pre_ortho_view_from_image,
+cv::Matx33f getPerspectiveTransformFromAllSquares(
     const std::vector<std::vector<cv::Point2f>>& square_contours)
 {
-    cv::Mat1d AtA(8, 8, 0.f);
-    cv::Mat1d AtB(8, 1, 0.f);
+    const double k = 1.0e-3; // Arbitrary normalization.
 
-    // Add prior.
+    const size_t num_extra_variables = 4 * square_contours.size();
+    const size_t D = 8 + num_extra_variables;
+    cv::Mat1d AtA(D, D, 0.f);
+    cv::Mat1d AtB(D, 1, 0.f);
+
+    // Reusable matrices for adding constraints.
+    cv::Mat1d A_row(1, D, 0.0);
+    cv::Mat1d A_row_head = A_row(cv::Rect(0, 0, 8, 1));
+
+    // Add a single constraint for absolute position.
     {
-        AtA.diag() = 1;
-        const cv::Mat1f M(pre_ortho_view_from_image);
-        for (const auto i : irange(8))
+        cv::Point2d sum(0, 0);
+        double count = 0.0;
+        for (const auto& contour : square_contours)
         {
-            AtB(i) = M(i);
+            for (const auto& p : contour)
+            {
+                sum += cv::Point2d(p);
+                count += 1;
+            }
         }
+        const cv::Point2d center = sum / count;
+        const float x = k * center.x;
+        const float y = k * center.y;
+        const float u = 0.5f;
+        const float v = 0.5f;
+
+        A_row_head << x, y, 1, 0, 0, 0, -x * u, -y * u;
+        AtA += A_row.t() * A_row;
+        AtB += A_row.t() * u;
+        A_row_head << 0, 0, 0, x, y, 1, -x * v, -y * v;
+        AtA += A_row.t() * A_row;
+        AtB += A_row.t() * v;
     }
 
-    // Add constraints for relative positions.
-    cv::Mat1d A_row(1, 8);
-    cv::Mat1d A_row0(1, 8);
-    cv::Mat1d A_row1(1, 8);
-    for (const auto& contour : square_contours)
+    // Add relative constraints for the edges of the squares.
+    for (const auto i : indices(square_contours))
     {
-        auto contour_in_pre_ortho_view = contour;
-        cv::perspectiveTransform(
-            contour,
-            contour_in_pre_ortho_view,
-            pre_ortho_view_from_image);
-        for (const auto i : indices(contour))
+        const auto& contour = square_contours[i];
+        const cv::Scalar center = cv::mean(contour);
+        for (const auto a : indices(contour))
         {
-            const auto j = (i + 1) % contour.size();
-            const auto& p0 = contour[i];
-            const auto& p1 = contour[j];
-            const auto& uv0 = contour_in_pre_ortho_view[i];
-            const auto& uv1 = contour_in_pre_ortho_view[j];
+            const auto b = (a + 1) % contour.size();
+            const auto& p0 = contour[a];
+            const auto& p1 = contour[b];
+            const float du0 = p0.x < center[0] ? -0.5 : 0.5;
+            const float dv0 = p0.y < center[1] ? -0.5 : 0.5;
+            const float du1 = p1.x < center[0] ? -0.5 : 0.5;
+            const float dv1 = p1.y < center[1] ? -0.5 : 0.5;
+            const float x0 = k * p0.x;
+            const float y0 = k * p0.y;
+            const float x1 = k * p1.x;
+            const float y1 = k * p1.y;
+            const float dx = x1 - x0;
+            const float dy = y1 - y0;
 
-            A_row0 << p0.x, p0.y, 1, 0, 0, 0, -p0.x * uv0.x, -p0.y * uv0.x;
-            A_row1 << p1.x, p1.y, 1, 0, 0, 0, -p1.x * uv1.x, -p1.y * uv1.x;
-            A_row = A_row1 - A_row0;
-            AtA += A_row.t() * A_row;
-            AtB += A_row.t() * std::round(uv1.x - uv0.x);
+            A_row.setTo(0);
+            A_row_head <<
+                dx,         // c00
+                dy,         // c01
+                0,          // c02
+                0, 0, 0,    // c10, c11, c12
+                du0*x0 - du1*x1, // c20
+                du0*y0 - du1*y1; // c21
+            A_row(8 + 4*i + 0) = -dx; // c20*cui
+            A_row(8 + 4*i + 1) = -dy; // c21*cui
 
-            A_row0 << 0, 0, 0, p0.x, p0.y, 1, -p0.x * uv0.y, -p0.y * uv0.y;
-            A_row1 << 0, 0, 0, p1.x, p1.y, 1, -p1.x * uv1.y, -p1.y * uv1.y;
-            A_row = A_row1 - A_row0;
             AtA += A_row.t() * A_row;
-            AtB += A_row.t() * std::round(uv1.y - uv0.y);
+            AtB += A_row.t() * (du1 - du0);
+
+            A_row.setTo(0);
+            A_row_head <<
+                0, 0, 0,    // c00, c01, c02
+                dx,         // c10
+                dy,         // c11
+                0,          // c12
+                dv0*x0 - dv1*x1, // c20
+                dv0*y0 - dv1*y1; // c21
+            A_row(8 + 4*i + 2) = -dx; // c20*cvi
+            A_row(8 + 4*i + 3) = -dy; // c21*cvi
+
+            AtA += A_row.t() * A_row;
+            AtB += A_row.t() * (dv1 - dv0);
         }
     }
 
@@ -315,11 +356,20 @@ cv::Matx33f getPerspectiveTransformFromSquares(
     VLOG(2) << "AtA:\n" << AtA;
     VLOG(2) << "AtB:\n" << AtB;
 
-    cv::Mat M(3, 3, CV_64F), X(8, 1, CV_64F, M.ptr());
+    cv::Mat1d X(D, 1);
     cv::solve(AtA, AtB, X, cv::DECOMP_SVD);
-    M.ptr<double>()[8] = 1.;
-    VLOG(2) << "Matrix coefficients:\n" << M;
-    return M;
+    VLOG(2) << "X:\n" << X;
+
+    const cv::Matx33d ortho_view_from_normalized_image(
+        X(0), X(1), X(2),
+        X(3), X(4), X(5),
+        X(6), X(7), 1.0);
+    VLOG(2) << "Matrix coefficients:\n" << ortho_view_from_normalized_image;
+    const cv::Matx33d normalized_image_from_image(
+        k,   0.0, 0.0,
+        0.0, k,   0.0,
+        0.0, 0.0, 1.0);
+    return ortho_view_from_normalized_image * normalized_image_from_image;
 }
 
 // Fit a multivariate polynomial that transforms source to destination.
@@ -450,7 +500,7 @@ cv::Mat3b findColorChecker(
     VLOG(1) << "Median square size: " << median_square_size;
 
     const cv::Matx33f ortho_view_from_image =
-        getAveragePerspectiveTransformFromSquares(squares.contours);
+        getPerspectiveTransformFromAllSquares(squares.contours);
 
     FindSquaresRetVal squares_in_ortho_view;
     squares_in_ortho_view.contours.resize(squares.contours.size());
