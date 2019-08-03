@@ -21,7 +21,7 @@ DEFINE_string(samples_dir, "",
 
 cv::Mat3b preprocess(const cv::Mat3b& image)
 {
-    const double scale = 500.0 / std::max(image.cols, image.rows);
+    const double scale = 800.0 / std::max(image.cols, image.rows);
     cv::Mat3b preprocessed_image;
     cv::resize(image, preprocessed_image, cv::Size(0, 0), scale, scale, cv::INTER_AREA);
     cv::blur(preprocessed_image, preprocessed_image, cv::Size(11, 11));
