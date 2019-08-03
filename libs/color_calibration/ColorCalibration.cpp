@@ -242,7 +242,7 @@ cv::Matx33f getPerspectiveTransformFromSquare(
     VLOG(2) << "AtB:\n" << AtB;
 
     cv::Mat M(3, 3, CV_64F), X(8, 1, CV_64F, M.ptr());
-    cv::solve(AtA, AtB, X);
+    cv::solve(AtA, AtB, X, cv::DECOMP_SVD);
     M.ptr<double>()[8] = 1.;
     VLOG(2) << "Matrix coefficients:\n" << M;
     return M;
@@ -255,9 +255,10 @@ cv::Matx33f getAveragePerspectiveTransformFromSquares(
     for (const auto& contour : square_contours)
     {
         const cv::Matx33d ortho_view_from_image = getPerspectiveTransformFromSquare(contour);
-        image_from_ortho_view_sum += ortho_view_from_image.inv();
+        image_from_ortho_view_sum += ortho_view_from_image.inv(cv::DECOMP_SVD);
     }
-    return (image_from_ortho_view_sum * (1.0 / image_from_ortho_view_sum(2, 2))).inv();
+    // Use Singular Value Decomposition for inverses to handle poor conditioned systems.
+    return (image_from_ortho_view_sum * (1.0 / image_from_ortho_view_sum(2, 2))).inv(cv::DECOMP_SVD);
 }
 
 cv::Matx33f getPerspectiveTransformFromSquares(
@@ -315,7 +316,7 @@ cv::Matx33f getPerspectiveTransformFromSquares(
     VLOG(2) << "AtB:\n" << AtB;
 
     cv::Mat M(3, 3, CV_64F), X(8, 1, CV_64F, M.ptr());
-    cv::solve(AtA, AtB, X);
+    cv::solve(AtA, AtB, X, cv::DECOMP_SVD);
     M.ptr<double>()[8] = 1.;
     VLOG(2) << "Matrix coefficients:\n" << M;
     return M;
@@ -544,7 +545,7 @@ cv::Mat3b findColorChecker(
                 uv + cv::Point2f(0.0f, 0.5f),
             };
             std::vector<cv::Point2f> arrows_xy(arrows_uv.size());
-            cv::perspectiveTransform(arrows_uv, arrows_xy, ortho_view_from_image.inv());
+            cv::perspectiveTransform(arrows_uv, arrows_xy, ortho_view_from_image.inv(cv::DECOMP_SVD));
             cv::line(canvas, arrows_xy[0], arrows_xy[1], kRed);
             cv::line(canvas, arrows_xy[0], arrows_xy[2], kBrightGreen);
             cv::drawMarker(canvas, xy, kWhite, cv::MARKER_SQUARE, 8);
