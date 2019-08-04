@@ -64,6 +64,12 @@ void splitSlashes(const std::string& str, std::vector<std::string>& out_tokens);
 
 /// splitCommas("a,,b") => {"a", "", "b"}
 void splitCommas(const std::string& str, std::vector<std::string>& out_tokens);
+inline std::vector<std::string> splitCommas(const std::string& str)
+{
+    std::vector<std::string> out;
+    splitCommas(str, out);
+    return out;
+}
 
 /// splitDelimiter("a,,b") => {"a", "", "b"}
 void splitDelimiter(const std::string& str, const char delimiter,
