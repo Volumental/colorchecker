@@ -63,10 +63,12 @@ Debugging tool for color correction with colorchecker calibration target.
         }
     }
 
-    for (const auto& sample_path : samples_paths)
+    for (size_t i = 0; !samples_paths.empty();)
     {
-        LOG(INFO) << "Loading " << sample_path;
-        cv::Mat3b sample_image = readCvImageOrDie(sample_path, cv::IMREAD_COLOR);
+        i = i % samples_paths.size();
+
+        LOG(INFO) << "Loading " << samples_paths[i];
+        cv::Mat3b sample_image = readCvImageOrDie(samples_paths[i], cv::IMREAD_COLOR);
         cv::Mat3b preprocessed_sample_image = preprocess(sample_image);
         cv::Mat3b sample_canvas = preprocessed_sample_image.clone();
         cv::Mat3b sample_checker = findColorChecker(preprocessed_sample_image, sample_canvas);
@@ -125,19 +127,31 @@ Debugging tool for color correction with colorchecker calibration target.
         }
         else if (key == 'g')
         {
-            moveSampleToDir(sample_path, fs::path("frames") / "good");
+            moveSampleToDir(samples_paths[i], fs::path("frames") / "good");
+            samples_paths.erase(samples_paths.begin() + i);
         }
         else if (key == 'b')
         {
-            moveSampleToDir(sample_path, fs::path("frames") / "bad");
+            moveSampleToDir(samples_paths[i], fs::path("frames") / "bad");
+            samples_paths.erase(samples_paths.begin() + i);
         }
         else if (key == 'c')
         {
-            moveSampleToDir(sample_path, fs::path("frames") / "cropped");
+            moveSampleToDir(samples_paths[i], fs::path("frames") / "cropped");
+            samples_paths.erase(samples_paths.begin() + i);
         }
-    }
-    while ((cv::waitKey(0) & 255) != 27)
-    {
+        else if (key == 2) // Back
+        {
+            i += samples_paths.size() - 1;
+        }
+        else if (key == 3) // Forward
+        {
+            i += 1;
+        }
+        else
+        {
+            LOG(INFO) << "key: " << key;
+        }
     }
     return 0;
 }
