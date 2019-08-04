@@ -307,19 +307,32 @@ cv::Matx33f getAveragePerspectiveTransformFromSquares(
     return (image_from_ortho_view_sum * (1.0 / image_from_ortho_view_sum(2, 2))).inv(cv::DECOMP_SVD);
 }
 
+cv::Point3f getLineCoordinateFromPoints(const cv::Point2f& a, const cv::Point2f& b)
+{
+    const float dx = b.x - a.x;
+    const float dy = b.y - a.y;
+    return { dy, -dx, dx * a.y - dy * a.x};
+}
+
+cv::Point2f getGeometricSquareCenter(const std::vector<cv::Point2f>& contour)
+{
+    CHECK_EQ(contour.size(), 4);
+    const cv::Point3f line_1 = getLineCoordinateFromPoints(contour[0], contour[2]);
+    const cv::Point3f line_2 = getLineCoordinateFromPoints(contour[1], contour[3]);
+    const cv::Point3f intersection = line_1.cross(line_2);
+    return { intersection.x / intersection.z, intersection.y / intersection.z };
+}
+
 cv::Matx33f getPerspectiveTransformFromAllSquares(
     const std::vector<std::vector<cv::Point2f>>& square_contours)
 {
     const double k = 1.0e-3; // Arbitrary normalization.
 
-    const size_t num_extra_variables = 4 * square_contours.size();
-    const size_t D = 8 + num_extra_variables;
-    cv::Mat1d AtA(D, D, 0.f);
-    cv::Mat1d AtB(D, 1, 0.f);
+    cv::Mat1d AtA(8, 8, 0.f);
+    cv::Mat1d AtB(8, 1, 0.f);
 
     // Reusable matrices for adding constraints.
-    cv::Mat1d A_row(1, D, 0.0);
-    cv::Mat1d A_row_head = A_row(cv::Rect(0, 0, 8, 1));
+    cv::Mat1d A_row(1, 8, 0.0);
 
     // Add a single constraint for absolute position.
     {
@@ -339,10 +352,10 @@ cv::Matx33f getPerspectiveTransformFromAllSquares(
         const float u = 0.5f;
         const float v = 0.5f;
 
-        A_row_head << x, y, 1, 0, 0, 0, -x * u, -y * u;
+        A_row << x, y, 1, 0, 0, 0, -x * u, -y * u;
         AtA += A_row.t() * A_row;
         AtB += A_row.t() * u;
-        A_row_head << 0, 0, 0, x, y, 1, -x * v, -y * v;
+        A_row << 0, 0, 0, x, y, 1, -x * v, -y * v;
         AtA += A_row.t() * A_row;
         AtB += A_row.t() * v;
     }
@@ -351,50 +364,25 @@ cv::Matx33f getPerspectiveTransformFromAllSquares(
     for (const auto i : indices(square_contours))
     {
         const auto& contour = square_contours[i];
-        const cv::Scalar center = cv::mean(contour);
-        for (const auto a : indices(contour))
+        const auto center = getGeometricSquareCenter(contour);
+        const float cx = k * center.x;
+        const float cy = k * center.y;
+        for (const auto& p : contour)
         {
-            const auto b = (a + 1) % contour.size();
-            const auto& p0 = contour[a];
-            const auto& p1 = contour[b];
-            const float du0 = p0.x < center[0] ? -0.5 : 0.5;
-            const float dv0 = p0.y < center[1] ? -0.5 : 0.5;
-            const float du1 = p1.x < center[0] ? -0.5 : 0.5;
-            const float dv1 = p1.y < center[1] ? -0.5 : 0.5;
-            const float x0 = k * p0.x;
-            const float y0 = k * p0.y;
-            const float x1 = k * p1.x;
-            const float y1 = k * p1.y;
-            const float dx = x1 - x0;
-            const float dy = y1 - y0;
+            const float x = k * p.x;
+            const float y = k * p.y;
+            const float dx = x - cx;
+            const float dy = y - cy;
+            const float du = dx < 0 ? -0.5 : 0.5;
+            const float dv = dy < 0 ? -0.5 : 0.5;
 
-            A_row.setTo(0);
-            A_row_head <<
-                dx,         // c00
-                dy,         // c01
-                0,          // c02
-                0, 0, 0,    // c10, c11, c12
-                du0*x0 - du1*x1, // c20
-                du0*y0 - du1*y1; // c21
-            A_row(8 + 4*i + 0) = -dx; // c20*cui
-            A_row(8 + 4*i + 1) = -dy; // c21*cui
-
+            A_row << dx, dy, 0, 0, 0, 0, -x*du, -y*du;
             AtA += A_row.t() * A_row;
-            AtB += A_row.t() * (du1 - du0);
+            AtB += A_row.t() * du;
 
-            A_row.setTo(0);
-            A_row_head <<
-                0, 0, 0,    // c00, c01, c02
-                dx,         // c10
-                dy,         // c11
-                0,          // c12
-                dv0*x0 - dv1*x1, // c20
-                dv0*y0 - dv1*y1; // c21
-            A_row(8 + 4*i + 2) = -dx; // c20*cvi
-            A_row(8 + 4*i + 3) = -dy; // c21*cvi
-
+            A_row << 0, 0, 0, dx, dy, 0, -x*dv, -y*dv;
             AtA += A_row.t() * A_row;
-            AtB += A_row.t() * (dv1 - dv0);
+            AtB += A_row.t() * dv;
         }
     }
 
@@ -402,7 +390,7 @@ cv::Matx33f getPerspectiveTransformFromAllSquares(
     VLOG(2) << "AtA:\n" << AtA;
     VLOG(2) << "AtB:\n" << AtB;
 
-    cv::Mat1d X(D, 1);
+    cv::Mat1d X(8, 1);
     cv::solve(AtA, AtB, X, cv::DECOMP_SVD);
     VLOG(2) << "X:\n" << X;
 
