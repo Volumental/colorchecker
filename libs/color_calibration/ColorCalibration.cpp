@@ -323,6 +323,36 @@ cv::Point2f getGeometricSquareCenter(const std::vector<cv::Point2f>& contour)
     return { intersection.x / intersection.z, intersection.y / intersection.z };
 }
 
+std::vector<cv::Point2f> getIdealSquareCorners(
+    const std::vector<cv::Point2f>& contour,
+    const cv::Point2f& center)
+{
+    CHECK_EQ(contour.size(), 4);
+    std::vector<float> angles;
+    for (const auto& p : contour)
+    {
+        angles.push_back(std::atan2(p.y - center.y, p.x - center.x));
+    }
+    std::vector<size_t> contour_order_from_ideal_order = makeVector(indices(contour));
+    komb::sort(contour_order_from_ideal_order, [&](size_t a, size_t b)
+    {
+        return angles[a] < angles[b];
+    });
+    const cv::Point2f ideal_corners[] = {
+        { -0.5, -0.5 },
+        { +0.5, -0.5 },
+        { +0.5, +0.5 },
+        { -0.5, +0.5 },
+    };
+    std::vector<cv::Point2f> out_corners;
+    out_corners.reserve(4);
+    for (const auto i : contour_order_from_ideal_order)
+    {
+        out_corners.push_back(ideal_corners[i]);
+    }
+    return out_corners;
+}
+
 cv::Matx33f getPerspectiveTransformFromAllSquares(
     const std::vector<std::vector<cv::Point2f>>& square_contours)
 {
@@ -365,16 +395,17 @@ cv::Matx33f getPerspectiveTransformFromAllSquares(
     {
         const auto& contour = square_contours[i];
         const auto center = getGeometricSquareCenter(contour);
+        const auto contour_in_local_ortho_view = getIdealSquareCorners(contour, center);
         const float cx = k * center.x;
         const float cy = k * center.y;
-        for (const auto& p : contour)
+        for (const auto pi : indices(contour))
         {
-            const float x = k * p.x;
-            const float y = k * p.y;
+            const float x = k * contour[pi].x;
+            const float y = k * contour[pi].y;
             const float dx = x - cx;
             const float dy = y - cy;
-            const float du = dx < 0 ? -0.5 : 0.5;
-            const float dv = dy < 0 ? -0.5 : 0.5;
+            const float du = contour_in_local_ortho_view[pi].x;
+            const float dv = contour_in_local_ortho_view[pi].y;
 
             A_row << dx, dy, 0, 0, 0, 0, -x*du, -y*du;
             AtA += A_row.t() * A_row;
