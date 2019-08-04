@@ -19,6 +19,13 @@ DEFINE_string(reference, "resources/ColorChecker_sRGB_from_Lab_D50_AfterNov2014.
 DEFINE_string(image, "",
     "Optional path to image to adjust.");
 
+struct HistoryItem
+{
+    size_t sample_index;
+    fs::path original_path;
+    fs::path new_path;
+};
+
 cv::Mat3b preprocess(const cv::Mat3b& image)
 {
     const double scale = 800.0 / std::max(image.cols, image.rows);
@@ -28,12 +35,48 @@ cv::Mat3b preprocess(const cv::Mat3b& image)
     return preprocessed_image;
 }
 
-void moveSampleToDir(const fs::path& sample_path, const fs::path& target_dir)
+fs::path moveSampleToDir(const fs::path& sample_path, const fs::path& target_dir)
 {
     const fs::path target_path = target_dir / sample_path.filename();
     LOG(INFO) << "Moving " << sample_path << " to " << target_path;
     createDirectories(target_dir);
     fs::rename(sample_path, target_path);
+    return target_path;
+}
+
+void moveSampleWithHistory(
+    std::vector<HistoryItem>& io_history,
+    std::vector<fs::path>& io_samples_paths,
+    size_t sample_index,
+    const fs::path& target_dir)
+{
+    const auto new_path = moveSampleToDir(io_samples_paths[sample_index], target_dir);
+    io_history.push_back(HistoryItem{
+        sample_index,
+        io_samples_paths[sample_index],
+        new_path});
+    io_samples_paths.erase(io_samples_paths.begin() + sample_index);
+}
+
+void undoFromHistory(
+    std::vector<HistoryItem>& io_history,
+    std::vector<fs::path>& io_samples_paths,
+    size_t& io_sample_index)
+{
+    if (io_history.empty())
+    {
+        LOG(WARNING) << "No history to undo";
+        return;
+    }
+    io_sample_index = io_history.back().sample_index;
+    CHECK_LE(io_sample_index, io_samples_paths.size());
+    const auto& from = io_history.back().new_path;
+    const auto& to = io_history.back().original_path;
+    LOG(INFO) << "Moving " << from << " to " << to;
+    createParentPath(to);
+    fs::rename(from, to);
+    io_samples_paths.insert(io_samples_paths.begin() + io_sample_index, to);
+    io_history.pop_back();
 }
 
 int main(int argc, char* argv[])
@@ -63,6 +106,7 @@ Debugging tool for color correction with colorchecker calibration target.
         }
     }
 
+    std::vector<HistoryItem> history;
     for (size_t i = 0; !samples_paths.empty();)
     {
         i = i % samples_paths.size();
@@ -127,18 +171,19 @@ Debugging tool for color correction with colorchecker calibration target.
         }
         else if (key == 'g')
         {
-            moveSampleToDir(samples_paths[i], fs::path("frames") / "good");
-            samples_paths.erase(samples_paths.begin() + i);
+            moveSampleWithHistory(history, samples_paths, i, fs::path("frames") / "good");
         }
         else if (key == 'b')
         {
-            moveSampleToDir(samples_paths[i], fs::path("frames") / "bad");
-            samples_paths.erase(samples_paths.begin() + i);
+            moveSampleWithHistory(history, samples_paths, i, fs::path("frames") / "bad");
         }
         else if (key == 'c')
         {
-            moveSampleToDir(samples_paths[i], fs::path("frames") / "cropped");
-            samples_paths.erase(samples_paths.begin() + i);
+            moveSampleWithHistory(history, samples_paths, i, fs::path("frames") / "cropped");
+        }
+        else if (key == 'z')
+        {
+            undoFromHistory(history, samples_paths, i);
         }
         else if (key == 2) // Back
         {
