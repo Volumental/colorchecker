@@ -5,19 +5,19 @@
 #include <color_calibration/ColorCalibration.hpp>
 #include <common/Logging.hpp>
 #include <common/LoggingInit.hpp>
+#include <common/String.hpp>
 #include <file_io_toolbox/FileSystem.hpp>
 #include <image_toolbox/ImageIo.hpp>
 
 using namespace komb;
 
 DEFINE_string(sample, "resources/ColorChecker_sRGB_from_Lab_D50.png",
-    "Path to camera image with a colorchecker that should be calibrated to reference colors.");
+    "Paths to camera images with colorcheckers that should be calibrated to reference colors. "
+    "Files and/or folders separated by comma.");
 DEFINE_string(reference, "resources/ColorChecker_sRGB_from_Lab_D50_AfterNov2014.png",
     "Path to image with colorchecker reference colors.");
 DEFINE_string(image, "",
     "Optional path to image to adjust.");
-DEFINE_string(samples_dir, "",
-    "Optional path to folder with images of colorcheckers.");
 
 cv::Mat3b preprocess(const cv::Mat3b& image)
 {
@@ -50,8 +50,18 @@ Debugging tool for color correction with colorchecker calibration target.
 
     cv::Mat3b camera_image = readCvImage(FLAGS_image, cv::IMREAD_COLOR);
 
-    const std::vector<fs::path> samples_paths = FLAGS_samples_dir != "" ?
-        getFilesInDir(FLAGS_samples_dir, ".png;.jpg") : std::vector<fs::path>{FLAGS_sample};
+    std::vector<fs::path> samples_paths;
+    for (const auto& str : splitCommas(FLAGS_sample))
+    {
+        if (fs::is_directory(str))
+        {
+            append(samples_paths, getFilesInDir(str, ".png;.jpg"));
+        }
+        else
+        {
+            samples_paths.push_back(str);
+        }
+    }
 
     for (const auto& sample_path : samples_paths)
     {
